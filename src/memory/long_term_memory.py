@@ -172,8 +172,8 @@ class LongTermMemory:
                             category=r.get("category", "general"),
                             importance=r.get("importance", 0.8),
                         )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to summarize pending items: %s", e)
 
         self._pending_items.clear()
 

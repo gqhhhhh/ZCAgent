@@ -33,7 +33,9 @@ INTENT_KEYWORDS: dict[IntentType, list[str]] = {
 
 
 # Multiplier to scale raw keyword match ratio into confidence score
-CONFIDENCE_SCALE_FACTOR = 3.0
+# Multiplier to scale keyword match ratio into a confidence score.
+# A ratio of ~0.33 (keyword length / text length) maps to confidence 1.0.
+KEYWORD_MATCH_CONFIDENCE_MULTIPLIER = 3.0
 
 
 class IntentParser:
@@ -85,7 +87,7 @@ class IntentParser:
                         best_intent = intent_type
                         matched_keywords = [keyword]
 
-        confidence = min(best_score * CONFIDENCE_SCALE_FACTOR, 1.0) if best_score > 0 else 0.0
+        confidence = min(best_score * KEYWORD_MATCH_CONFIDENCE_MULTIPLIER, 1.0) if best_score > 0 else 0.0
         domain = INTENT_DOMAIN_MAP.get(best_intent, DomainType.GENERAL)
         slots = self._extract_slots(text, best_intent)
 

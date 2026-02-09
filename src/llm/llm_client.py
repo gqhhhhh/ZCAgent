@@ -103,5 +103,5 @@ class LLMClient:
                 raw = parts.split("```", 1)[0].strip() if "```" in parts else parts.strip()
             return json.loads(raw)
         except json.JSONDecodeError as e:
-            logger.error("Failed to parse JSON from LLM response: %s", e)
+            logger.error("Failed to parse JSON from LLM response: %s\nResponse preview: %.100s", e, raw)
             raise ValueError(f"LLM response is not valid JSON: {e}") from e

@@ -3,6 +3,8 @@
 import logging
 import uuid
 
+from typing import Callable
+
 from src.cockpit.domains import DomainType, IntentType, ParsedIntent
 from src.task.task_graph import Task, TaskPriority
 
@@ -27,7 +29,7 @@ class TaskExecutor:
 
     def __init__(self, scheduler=None):
         self.scheduler = scheduler
-        self._handlers: dict[str, object] = {}
+        self._handlers: dict[str, Callable[[Task], dict]] = {}
         self._register_default_handlers()
 
     def _register_default_handlers(self):
