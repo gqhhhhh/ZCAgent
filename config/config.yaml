@@ -1,0 +1,35 @@
+llm:
+  model: "gpt-4"
+  temperature: 0.3
+  max_tokens: 2048
+  api_base: ""
+  api_key: ""
+
+rag:
+  bm25_weight: 0.4
+  mmr_weight: 0.6
+  mmr_lambda: 0.7
+  top_k: 5
+  rerank_top_k: 3
+
+memory:
+  working_memory_capacity: 10
+  short_term_ttl_seconds: 300
+  long_term_importance_threshold: 0.7
+  summary_trigger_count: 20
+
+task:
+  max_parallel_tasks: 5
+  safety_priority: 100
+  navigation_priority: 80
+  phone_priority: 70
+  music_priority: 50
+  vehicle_setting_priority: 60
+
+safety:
+  blocked_while_driving:
+    - "watch_video"
+    - "browse_web"
+  require_confirmation:
+    - "emergency_call"
+    - "open_window_highway"
