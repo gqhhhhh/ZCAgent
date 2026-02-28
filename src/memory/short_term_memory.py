@@ -1,4 +1,8 @@
-"""Short-term memory with TTL-based expiry."""
+"""Short-term memory with TTL-based expiry.
+
+短期记忆：保存最近的对话历史，每条记录带时间戳，超过 TTL 自动过期清理。
+为 Agent 提供最近对话上下文，支持按关键词搜索。
+"""
 
 import time
 from dataclasses import dataclass, field

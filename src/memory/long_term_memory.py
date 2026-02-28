@@ -1,7 +1,15 @@
-"""Long-term memory with importance scoring and conflict resolution."""
+"""Long-term memory with importance scoring and conflict resolution.
 
+长期记忆：持久化存储用户偏好和重要事实。
+仅当重要性 ≥ 阈值时写入，新旧信息冲突时按重要性消解。
+待处理条目积累到阈值时触发 LLM 摘要提炼。
+"""
+
+import logging
 import time
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

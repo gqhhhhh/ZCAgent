@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from src.agent.dispatcher import AgentDispatcher
+from src.agent.dispatcher import DEFAULT_FAST_PATH_THRESHOLD
 from src.cockpit.intent_parser import IntentParser
 from src.cockpit.safety_checker import SafetyChecker
 from src.agent.cot_agent import CoTAgent
@@ -150,9 +151,11 @@ def _safety_check_node(state: WorkflowState) -> WorkflowState:
 
 
 def _route_decision(state: WorkflowState) -> str:
+    """根据安全状态和置信度决定走快速路径还是深度推理路径。"""
     if not state.safety_result.get("is_safe", True):
         return "blocked"
-    if state.intent.get("confidence", 0) >= 0.6:
+    # 与 dispatcher 保持一致的快速路径阈值
+    if state.intent.get("confidence", 0) >= DEFAULT_FAST_PATH_THRESHOLD:
         return "tool_augment"
     return "cot_reasoning"
 

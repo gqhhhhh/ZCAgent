@@ -1,4 +1,8 @@
-"""Safety checker for cockpit commands."""
+"""Safety checker for cockpit commands.
+
+安全检查引擎：根据驾驶状态（停车/行驶/高速）和预设规则，判断操作是否允许执行。
+规则从 config/config.yaml 的 safety 部分加载，支持阻止列表和确认列表两种策略。
+"""
 
 import logging
 import os
@@ -54,30 +58,34 @@ class SafetyChecker:
         """
         warnings = []
 
-        # Safety domain commands always get highest priority
+        # 安全类操作（如 SOS、ADAS）始终放行，拥有最高优先级
         if intent.domain == DomainType.SAFETY:
             if intent.intent_type == IntentType.EMERGENCY_CALL:
+                logger.info("Safety pass: emergency_call (requires confirmation)")
                 return SafetyCheckResult(
                     is_safe=True,
                     requires_confirmation=True,
                     warnings=["紧急呼叫将立即执行"],
                 )
+            logger.info("Safety pass: %s (safety domain)", intent.intent_type.value)
             return SafetyCheckResult(is_safe=True)
 
-        # Check if action is blocked while driving
+        # 行驶中检查是否存在被禁止的操作（如看视频、浏览网页）
         if driving_state in ("driving", "highway"):
             action_name = intent.intent_type.value
             if action_name in self.blocked_while_driving:
+                logger.warning("Safety BLOCKED: '%s' while %s", action_name, driving_state)
                 return SafetyCheckResult(
                     is_safe=False,
                     blocked_reason=f"操作 '{action_name}' 在行驶中被禁止",
                 )
 
-            # Check confirmation requirements
+            # 某些操作在行驶/高速中需要用户二次确认后才执行
             check_key = action_name
             if driving_state == "highway" and intent.intent_type == IntentType.OPEN_WINDOW:
                 check_key = "open_window_highway"
             if check_key in self.require_confirmation:
+                logger.info("Safety CONFIRM required: '%s' while %s", action_name, driving_state)
                 return SafetyCheckResult(
                     is_safe=True,
                     requires_confirmation=True,

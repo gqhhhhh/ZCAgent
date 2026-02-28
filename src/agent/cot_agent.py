@@ -1,4 +1,8 @@
-"""Chain-of-Thought agent for deep semantic understanding."""
+"""Chain-of-Thought agent for deep semantic understanding.
+
+CoT Agent 通过逐步推理分析用户意图，适用于模糊或多意图请求。
+当 LLM 可用时进行链式思维分析，否则降级到基于规则的意图解析。
+"""
 
 import json
 import logging

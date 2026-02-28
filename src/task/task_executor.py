@@ -1,4 +1,8 @@
-"""Task executor for processing scheduled tasks."""
+"""Task executor for processing scheduled tasks.
+
+任务执行器：将 ParsedIntent 转换为 Task 对象，根据动作类型分发到
+对应的领域处理函数。支持通过 register_handler() 注册自定义处理逻辑。
+"""
 
 import logging
 import uuid
@@ -10,14 +14,14 @@ from src.task.task_graph import Task, TaskPriority
 
 logger = logging.getLogger(__name__)
 
-# Domain to priority mapping
+# 领域到任务优先级的默认映射（数值越大优先级越高）
 DOMAIN_PRIORITY = {
-    DomainType.SAFETY: TaskPriority.CRITICAL.value,
-    DomainType.NAVIGATION: TaskPriority.HIGH.value,
-    DomainType.PHONE: 70,
-    DomainType.VEHICLE_SETTING: TaskPriority.MEDIUM.value,
-    DomainType.MUSIC: TaskPriority.NORMAL.value,
-    DomainType.GENERAL: TaskPriority.LOW.value,
+    DomainType.SAFETY: TaskPriority.CRITICAL.value,       # 100 — 安全类最高
+    DomainType.NAVIGATION: TaskPriority.HIGH.value,       # 80  — 导航次之
+    DomainType.PHONE: 70,                                 # 70  — 电话
+    DomainType.VEHICLE_SETTING: TaskPriority.MEDIUM.value, # 60 — 车辆设置
+    DomainType.MUSIC: TaskPriority.NORMAL.value,          # 50  — 音乐娱乐
+    DomainType.GENERAL: TaskPriority.LOW.value,           # 30  — 通用查询
 }
 
 

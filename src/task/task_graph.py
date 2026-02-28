@@ -1,4 +1,8 @@
-"""Task graph for modeling task dependencies and parallel execution."""
+"""Task graph for modeling task dependencies and parallel execution.
+
+任务有向无环图（DAG）：管理任务间的依赖关系，
+按拓扑排序分组为并行执行波次，支持任务失败级联取消。
+"""
 
 import time
 from dataclasses import dataclass, field

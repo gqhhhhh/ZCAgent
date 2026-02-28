@@ -1,4 +1,8 @@
-"""Intent parser for cockpit voice commands."""
+"""Intent parser for cockpit voice commands.
+
+意图解析器：通过关键词匹配 + LLM 双重策略，将自然语言转为结构化的 ParsedIntent。
+关键词匹配速度快、确定性强，适合常见指令；LLM 解析处理模糊/复杂表述。
+"""
 
 import json
 import logging
@@ -38,6 +42,10 @@ INTENT_KEYWORDS: dict[IntentType, list[str]] = {
 KEYWORD_MATCH_CONFIDENCE_MULTIPLIER = 3.0
 
 
+# 关键词匹配置信度阈值：低于此值时尝试 LLM 解析
+KEYWORD_CONFIDENCE_THRESHOLD = 0.5
+
+
 class IntentParser:
     """Parse user input into structured intents using keyword matching and LLM."""
 
@@ -57,7 +65,8 @@ class IntentParser:
         """
         # Try keyword-based matching first
         intent = self._keyword_match(text)
-        if intent.confidence > 0.5:
+        # 关键词匹配置信度足够高时直接返回，无需 LLM
+        if intent.confidence > KEYWORD_CONFIDENCE_THRESHOLD:
             return intent
 
         # Fall back to LLM-based parsing if available

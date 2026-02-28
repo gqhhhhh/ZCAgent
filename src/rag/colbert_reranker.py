@@ -1,4 +1,9 @@
-"""ColBERT-style token-level reranker for fine-grained relevance scoring."""
+"""ColBERT-style token-level reranker for fine-grained relevance scoring.
+
+ColBERT 延迟交互重排序：对查询和文档在 Token 级别计算最大相似度（MaxSim），
+实现比全文匹配更细粒度的相关性评分。当前使用哈希模拟 embedding，
+生产环境应替换为真实 BERT/Transformer embedding。
+"""
 
 import hashlib
 import logging

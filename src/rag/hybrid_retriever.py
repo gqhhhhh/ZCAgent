@@ -1,4 +1,8 @@
-"""Hybrid retriever combining BM25 + MMR with ColBERT reranking."""
+"""Hybrid retriever combining BM25 + MMR with ColBERT reranking.
+
+三级混合检索管线：BM25 稀疏检索和 MMR 密集检索并行取候选，
+按权重加权融合后交给 ColBERT 重排序器做最终排序。
+"""
 
 import logging
 

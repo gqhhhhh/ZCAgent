@@ -1,4 +1,8 @@
-"""Unified memory manager orchestrating working, short-term, and long-term memory."""
+"""Unified memory manager orchestrating working, short-term, and long-term memory.
+
+三层记忆统一管理器：协调工作记忆、短期记忆、长期记忆的读写操作，
+对外提供单一的 get_context() 接口供 Agent 获取完整上下文。
+"""
 
 import logging
 

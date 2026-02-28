@@ -1,4 +1,9 @@
-"""Priority-based task scheduler with safety constraints."""
+"""Priority-based task scheduler with safety constraints.
+
+优先级调度器：根据领域分配优先级，安全任务可抢占其他任务。
+同领域新任务自动取消旧任务（如新导航替代旧导航），
+并行执行数受 max_parallel_tasks 限制。
+"""
 
 import logging
 from dataclasses import dataclass
@@ -100,8 +105,10 @@ class TaskScheduler:
     def _handle_conflicts(self, new_task: Task):
         """Handle conflicts between new task and existing tasks.
 
-        For example, a new navigation task cancels the previous navigation.
+        同领域冲突处理：导航和音乐领域的新任务会自动取消正在执行或等待中的同领域旧任务。
+        例如用户说"导航到B"时，之前"导航到A"的任务会被取消。
         """
+        # 需要排他执行的领域（同时只允许一个同领域任务）
         conflicting_domains = {"navigation", "music"}
         if new_task.domain in conflicting_domains:
             for task in self.graph.get_all_tasks():

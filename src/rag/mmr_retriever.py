@@ -1,4 +1,8 @@
-"""MMR-based retrieval for balancing relevance and diversity."""
+"""MMR-based retrieval for balancing relevance and diversity.
+
+最大边际相关性（MMR）检索：在与查询的相关性和结果间的多样性之间取平衡，
+避免返回内容高度重复的文档集。λ 参数控制两者权衡。
+"""
 
 import logging
 from dataclasses import dataclass, field

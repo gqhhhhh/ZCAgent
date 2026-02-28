@@ -1,4 +1,8 @@
-"""Working memory for current conversation context and active tasks."""
+"""Working memory for current conversation context and active tasks.
+
+工作记忆：容量有限的 key-value 存储，保存当前对话最相关的信息。
+超出容量时按重要性淘汰最不重要的条目（类似人脑工作记忆的容量限制）。
+"""
 
 import time
 from collections import OrderedDict
