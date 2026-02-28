@@ -1,4 +1,8 @@
-"""Amap (Gaode Maps) API tool for navigation and POI search."""
+"""Amap (Gaode Maps) API tool for navigation and POI search.
+
+高德地图 API 封装：支持 POI 搜索、地理编码和驾车路线规划。
+未配置 AMAP_API_KEY 时返回结构一致的模拟数据，保证开发流程不中断。
+"""
 
 import json
 import logging
@@ -10,6 +14,9 @@ import urllib.request
 from src.tools.base_tool import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+# HTTP 请求超时秒数（避免网络异常时长时间阻塞）
+_HTTP_TIMEOUT_SECONDS = 10
 
 
 class AmapTool(BaseTool):
@@ -101,7 +108,7 @@ class AmapTool(BaseTool):
         logger.debug("Amap request: %s", url)
 
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
 
         if data.get("status") != "1":

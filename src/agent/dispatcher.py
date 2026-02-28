@@ -1,4 +1,8 @@
-"""Agent dispatcher coordinating the multi-agent system."""
+"""Agent dispatcher coordinating the multi-agent system.
+
+中央调度器：串联意图解析、安全检查、推理路径选择、任务执行和记忆管理。
+采用双路径策略——高置信度走快速路径直接执行，低置信度走 CoT 深度推理。
+"""
 
 import logging
 import os
@@ -16,6 +20,9 @@ from src.task.task_executor import TaskExecutor
 from src.task.task_scheduler import TaskScheduler
 
 logger = logging.getLogger(__name__)
+
+# 快速路径置信度阈值：意图置信度 ≥ 此值时直接进入 PlanExecute，跳过 CoT 推理
+DEFAULT_FAST_PATH_THRESHOLD = 0.6
 
 
 class AgentDispatcher:
@@ -54,8 +61,10 @@ class AgentDispatcher:
             executor=self.executor,
         )
 
-        # Confidence threshold for fast vs deep path
-        self._fast_path_threshold = 0.6
+        # 快速路径置信度阈值（可通过 config 覆盖）
+        self._fast_path_threshold = config.get(
+            "fast_path_threshold", DEFAULT_FAST_PATH_THRESHOLD
+        )
 
     def _load_config(self) -> dict:
         """Load configuration from config.yaml."""
@@ -83,12 +92,12 @@ class AgentDispatcher:
         # Record in memory
         self.memory.add_user_message(user_input)
 
-        # Step 1: Parse intent
+        # Step 1: 意图解析 — 关键词匹配 + LLM 双重策略
         intent = self.intent_parser.parse(user_input)
         logger.info("Parsed intent: %s (confidence=%.2f)",
                     intent.intent_type.value, intent.confidence)
 
-        # Step 2: Safety check
+        # Step 2: 安全检查 — 行驶中阻止危险操作
         safety_result = self.safety_checker.check(intent, driving_state)
         if not safety_result.is_safe:
             response = AgentResponse(
@@ -99,12 +108,12 @@ class AgentDispatcher:
             self.memory.add_assistant_message(response.content)
             return response
 
-        # Step 3: Choose fast path or deep path
+        # Step 3: 根据置信度选择快速路径或深度路径
         context = self.memory.get_context()
         context["driving_state"] = driving_state
 
         if intent.confidence >= self._fast_path_threshold:
-            # Fast path: direct to plan-execute
+            # 快速路径：置信度足够高，直接构建任务执行
             intent_results = [{
                 "type": intent.intent_type.value,
                 "confidence": intent.confidence,
@@ -114,7 +123,7 @@ class AgentDispatcher:
             context["intent_results"] = intent_results
             response = self.plan_agent.process(user_input, context)
         else:
-            # Deep path: CoT reasoning first
+            # 深度路径：置信度不足，先通过 CoT 链式推理分析
             cot_response = self.cot_agent.process(user_input, context)
 
             if cot_response.intent_results:
@@ -126,12 +135,12 @@ class AgentDispatcher:
             else:
                 response = cot_response
 
-        # Handle confirmation requirement
+        # 需要用户确认的操作（如紧急呼叫、高速开窗）添加确认标记
         if safety_result.requires_confirmation:
             response.requires_confirmation = True
             response.content = f"[需要确认] {response.content}"
 
-        # Record response in memory
+        # 将本次交互记录到记忆系统，供后续对话参考
         self.memory.add_assistant_message(response.content)
 
         return response

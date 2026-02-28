@@ -1,4 +1,9 @@
-"""LLM client abstraction layer for the ZCAgent system."""
+"""LLM client abstraction layer for the ZCAgent system.
+
+统一的 LLM 调用接口，支持 OpenAI 兼容 API 和 Mock 模式。
+惰性初始化 OpenAI 客户端，未调用时不产生网络开销。
+generate_json() 自动从 LLM 回复中提取 JSON（含 Markdown 代码块处理）。
+"""
 
 import json
 import logging
@@ -11,14 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 class LLMClient:
-    """Abstraction layer for LLM API calls with mock support for testing."""
+    """Abstraction layer for LLM API calls with mock support for testing.
+
+    支持三种运行模式：
+    1. 真实 API 调用 — 配置 api_key 后通过 OpenAI SDK 调用
+    2. Mock 模式 — 传入 mock_response 参数，适用于测试
+    3. 自动降级 — openai 包未安装时自动切换到 Mock
+    """
+
+    # LLM 配置默认值
+    DEFAULT_MODEL = "gpt-4"
+    DEFAULT_TEMPERATURE = 0.3
+    DEFAULT_MAX_TOKENS = 2048
 
     def __init__(self, config: dict | None = None, mock_response: str | None = None):
         if config is None:
             config = self._load_config()
-        self.model = config.get("model", "gpt-4")
-        self.temperature = config.get("temperature", 0.3)
-        self.max_tokens = config.get("max_tokens", 2048)
+        self.model = config.get("model", self.DEFAULT_MODEL)
+        self.temperature = config.get("temperature", self.DEFAULT_TEMPERATURE)
+        self.max_tokens = config.get("max_tokens", self.DEFAULT_MAX_TOKENS)
         self.api_key = config.get("api_key", "") or os.environ.get("OPENAI_API_KEY", "")
         self.api_base = config.get("api_base", "") or os.environ.get("OPENAI_API_BASE", "")
         self._mock_response = mock_response

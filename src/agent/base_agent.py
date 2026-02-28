@@ -1,4 +1,8 @@
-"""Base agent class for the multi-agent system."""
+"""Base agent class for the multi-agent system.
+
+所有 Agent 的抽象基类，定义统一的 process() 接口和 AgentResponse 返回结构。
+新增 Agent 只需继承 BaseAgent 并实现 process() 方法。
+"""
 
 import logging
 from abc import ABC, abstractmethod

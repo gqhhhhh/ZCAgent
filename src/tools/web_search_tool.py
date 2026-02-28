@@ -1,4 +1,8 @@
-"""Web search tool for information retrieval."""
+"""Web search tool for information retrieval.
+
+网页搜索工具：基于 Bing Web Search API 进行实时信息检索。
+未配置 WEB_SEARCH_API_KEY 时返回模拟结果，方便开发测试。
+"""
 
 import json
 import logging
@@ -10,6 +14,9 @@ import urllib.request
 from src.tools.base_tool import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+# HTTP 请求超时秒数
+_HTTP_TIMEOUT_SECONDS = 10
 
 
 class WebSearchTool(BaseTool):
@@ -88,7 +95,7 @@ class WebSearchTool(BaseTool):
             "Ocp-Apim-Subscription-Key": self.api_key,
             "Accept": "application/json",
         })
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read().decode("utf-8"))
 
         results = []

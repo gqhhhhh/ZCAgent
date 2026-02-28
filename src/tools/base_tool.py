@@ -1,4 +1,8 @@
-"""Base tool interface for external API integrations."""
+"""Base tool interface for external API integrations.
+
+外部工具抽象基类：定义 run() 调用接口和 ToolResult 统一返回结构。
+所有外部 API 工具（高德地图、网页搜索等）继承此基类。
+"""
 
 import logging
 from abc import ABC, abstractmethod

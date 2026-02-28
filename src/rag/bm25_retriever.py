@@ -1,4 +1,8 @@
-"""BM25 sparse retrieval for rule-based and keyword matching."""
+"""BM25 sparse retrieval for rule-based and keyword matching.
+
+Okapi BM25 稀疏检索实现：基于词频（TF）和逆文档频率（IDF）计算文档相关性。
+擅长精确关键词匹配场景，支持 jieba 中文分词（可选）。
+"""
 
 import logging
 import math

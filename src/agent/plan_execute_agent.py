@@ -1,4 +1,8 @@
-"""Plan-and-Execute agent for multi-step task planning and execution."""
+"""Plan-and-Execute agent for multi-step task planning and execution.
+
+将用户意图分解为可执行的任务 DAG（有向无环图），按依赖顺序逐波执行。
+支持安全检查拦截、任务失败回退和多任务并行处理。
+"""
 
 import json
 import logging
@@ -44,11 +48,12 @@ class PlanExecuteAgent(BaseAgent):
                 confidence=0.0,
             )
 
-        # Build task graph from intents
+        # 根据意图列表构建任务 DAG
         graph = TaskGraph()
         tasks = []
 
         for i, intent_data in enumerate(intent_results):
+            # 将字符串意图类型映射回枚举，无法识别时标记为 UNKNOWN
             try:
                 intent_type = IntentType(intent_data.get("type", "unknown"))
             except ValueError:
@@ -76,15 +81,14 @@ class PlanExecuteAgent(BaseAgent):
 
             graph.add_task(task)
 
-        # Add dependencies between sequential tasks
-        # Safety tasks have no dependencies; others depend on safety tasks completing
+        # 建立任务间依赖：非安全任务依赖所有安全任务先完成
         safety_task_ids = [t.task_id for t in tasks if t.domain == "safety"]
         for task in tasks:
             if task.domain != "safety" and safety_task_ids:
                 for sid in safety_task_ids:
                     graph.add_dependency(task.task_id, sid)
 
-        # Execute tasks in dependency order
+        # 按 DAG 拓扑排序执行：每一波内的任务可并行执行
         task_results = []
         execution_waves = graph.get_execution_order()
 
@@ -104,7 +108,7 @@ class PlanExecuteAgent(BaseAgent):
                             "error": str(e),
                         })
 
-        # Build response
+        # 组装最终响应：根据任务成功/失败比例生成用户可读的结果文本
         success_count = sum(1 for r in task_results if r.get("status") == "success")
         total = len(task_results)
 

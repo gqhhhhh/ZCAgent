@@ -1,4 +1,8 @@
-"""Domain definitions for the intelligent cockpit system."""
+"""Domain definitions for the intelligent cockpit system.
+
+定义座舱系统的领域类型（导航/电话/音乐/车控/安全/通用）和意图类型枚举，
+以及意图到领域的映射关系。所有模块共享这些类型定义以保证一致性。
+"""
 
 from dataclasses import dataclass, field
 from enum import Enum
