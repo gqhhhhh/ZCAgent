@@ -19,7 +19,7 @@ Example usage::
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from langgraph.graph import StateGraph, END, START  # type: ignore[import]
 
@@ -102,7 +102,7 @@ def _route_decision(state: WorkflowState) -> Literal["blocked", "tool_augment", 
 def _cot_node(state: WorkflowState) -> dict:
     agent = CoTAgent()
     response = agent.process(state.get("user_input", ""))
-    result: dict[str, Any] = {
+    result = {
         "cot_result": {
             "content": response.content,
             "intents": response.intent_results,

@@ -70,8 +70,8 @@ def create_autogen_tools(
         return json.dumps(result.data, ensure_ascii=False)
 
     return [
-        FunctionTool(cockpit_command, description="执行智能座舱指令"),
-        FunctionTool(map_search, description="高德地图搜索"),
+        FunctionTool(cockpit_command, description="执行智能座舱指令", name="cockpit_command"),
+        FunctionTool(map_search, description="高德地图搜索", name="map_search"),
         FunctionTool(web_search_fn, description="网页搜索", name="web_search"),
     ]
 
