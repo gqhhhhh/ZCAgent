@@ -3,9 +3,10 @@
 Provides an AutoGen-compatible assistant agent wrapper so that ZCAgent
 capabilities can participate in AutoGen multi-agent conversations.
 
-The adapter works **without** the ``autogen`` / ``pyautogen`` package
-installed.  When AutoGen is available, :class:`ZCAgentAssistant` can be
-used as a drop-in ``AssistantAgent`` replacement.
+Uses real ``autogen-core`` :class:`FunctionTool` to wrap ZCAgent
+capabilities as AutoGen-native tools.  The :func:`create_autogen_tools`
+helper returns a list of ``FunctionTool`` instances ready to be passed to
+an AutoGen ``AssistantAgent``.
 
 Example usage::
 
@@ -23,6 +24,8 @@ import json
 import logging
 from typing import Any
 
+from autogen_core.tools import FunctionTool  # type: ignore[import]
+
 from src.agent.dispatcher import AgentDispatcher
 from src.tools.amap_tool import AmapTool
 from src.tools.web_search_tool import WebSearchTool
@@ -30,12 +33,56 @@ from src.tools.web_search_tool import WebSearchTool
 logger = logging.getLogger(__name__)
 
 
+def create_autogen_tools(
+    config: dict | None = None,
+    llm_client: Any = None,
+) -> list[FunctionTool]:
+    """Create a list of AutoGen ``FunctionTool`` instances for ZCAgent.
+
+    These tools can be passed directly to an AutoGen ``AssistantAgent``
+    via the ``tools`` parameter.
+
+    Args:
+        config: ZCAgent configuration dict.
+        llm_client: ZCAgent ``LLMClient`` instance.
+
+    Returns:
+        List of ``FunctionTool`` instances.
+    """
+    dispatcher = AgentDispatcher(config=config, llm_client=llm_client)
+    amap = AmapTool()
+    web_search = WebSearchTool()
+
+    def cockpit_command(command: str, driving_state: str = "parked") -> str:
+        """执行智能座舱指令，包括导航、音乐播放、电话、车辆控制等。"""
+        response = dispatcher.process(command, driving_state=driving_state)
+        return json.dumps({"content": response.content, "confidence": response.confidence},
+                          ensure_ascii=False)
+
+    def map_search(action: str = "poi_search", keywords: str = "", **kwargs: Any) -> str:
+        """高德地图搜索，支持POI搜索、地理编码、路径规划。"""
+        result = amap.run(action=action, keywords=keywords, **kwargs)
+        return json.dumps(result.data, ensure_ascii=False)
+
+    def web_search_fn(query: str, count: int = 5) -> str:
+        """网页搜索，输入关键词返回搜索结果。"""
+        result = web_search.run(query=query, count=count)
+        return json.dumps(result.data, ensure_ascii=False)
+
+    return [
+        FunctionTool(cockpit_command, description="执行智能座舱指令"),
+        FunctionTool(map_search, description="高德地图搜索"),
+        FunctionTool(web_search_fn, description="网页搜索", name="web_search"),
+    ]
+
+
 class ZCAgentAssistant:
     """AutoGen-compatible assistant wrapping ZCAgent functionality.
 
     Mirrors the ``AssistantAgent`` interface (``generate_reply``,
     ``register_function``) so it can participate in AutoGen group chats
-    or two-agent conversations.
+    or two-agent conversations.  Internally uses ``autogen_core.tools.FunctionTool``
+    to wrap ZCAgent tools.
     """
 
     def __init__(
@@ -49,6 +96,7 @@ class ZCAgentAssistant:
         self.amap = AmapTool()
         self.web_search = WebSearchTool()
         self._functions: dict[str, Any] = {}
+        self._autogen_tools = create_autogen_tools(config=config, llm_client=llm_client)
         self._register_default_functions()
 
     # ------------------------------------------------------------------
@@ -115,51 +163,10 @@ class ZCAgentAssistant:
         return dict(self._functions)
 
     def get_tool_definitions(self) -> list[dict]:
-        """Return OpenAI-style tool definitions for function calling."""
+        """Return OpenAI-style tool definitions derived from AutoGen FunctionTool schemas."""
         return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "cockpit_command",
-                    "description": "执行智能座舱指令",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {"type": "string", "description": "自然语言指令"},
-                        },
-                        "required": ["command"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "map_search",
-                    "description": "高德地图搜索",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "action": {"type": "string"},
-                            "keywords": {"type": "string"},
-                        },
-                        "required": ["action"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "web_search",
-                    "description": "网页搜索",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string"},
-                        },
-                        "required": ["query"],
-                    },
-                },
-            },
+            {"type": "function", "function": ft.schema}
+            for ft in self._autogen_tools
         ]
 
     # ------------------------------------------------------------------

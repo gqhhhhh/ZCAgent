@@ -2,11 +2,10 @@
 
 Provides a graph-based workflow that mirrors the ZCAgent two-stage pipeline
 (intent parsing → CoT reasoning / fast-path → plan-and-execute) as a
-LangGraph-style state graph.
+real LangGraph state graph.
 
-The adapter works **without** LangGraph installed by providing a lightweight
-``StateGraph`` implementation.  When LangGraph is available, callers can
-convert the workflow into a native LangGraph ``CompiledGraph``.
+Uses the real ``langgraph`` library to build and compile a ``StateGraph``
+with typed state, conditional edges, and automatic state merging.
 
 Example usage::
 
@@ -14,15 +13,16 @@ Example usage::
 
     workflow = create_langgraph_workflow()
     result = workflow.invoke({"user_input": "导航到天安门，顺便放首歌"})
+    print(result["final_response"])
 """
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, Literal, TypedDict
 
-from src.agent.dispatcher import AgentDispatcher
+from langgraph.graph import StateGraph, END, START  # type: ignore[import]
+
 from src.agent.dispatcher import DEFAULT_FAST_PATH_THRESHOLD
 from src.cockpit.intent_parser import IntentParser
 from src.cockpit.safety_checker import SafetyChecker
@@ -35,195 +35,138 @@ logger = logging.getLogger(__name__)
 
 
 # -----------------------------------------------------------------------
-# Lightweight state-graph abstraction (works without langgraph installed)
+# State definition (TypedDict for LangGraph)
 # -----------------------------------------------------------------------
 
-@dataclass
-class WorkflowState:
-    """Mutable state flowing through the graph."""
-    user_input: str = ""
-    driving_state: str = "parked"
-    intent: dict = field(default_factory=dict)
-    safety_result: dict = field(default_factory=dict)
-    cot_result: dict = field(default_factory=dict)
-    plan_result: dict = field(default_factory=dict)
-    tool_results: dict = field(default_factory=dict)
-    final_response: str = ""
-    metadata: dict = field(default_factory=dict)
-
-
-class StateGraph:
-    """Minimal directed graph for workflow orchestration.
-
-    Nodes are ``(name, fn)`` pairs where *fn* accepts and returns a
-    ``WorkflowState``.  Edges can be unconditional or conditional.
-    """
-
-    def __init__(self):
-        self._nodes: dict[str, Callable[[WorkflowState], WorkflowState]] = {}
-        self._edges: dict[str, str | Callable[[WorkflowState], str]] = {}
-        self._entry: str | None = None
-
-    def add_node(self, name: str, fn: Callable[[WorkflowState], WorkflowState]):
-        self._nodes[name] = fn
-
-    def add_edge(self, src: str, dst: str):
-        self._edges[src] = dst
-
-    def add_conditional_edge(self, src: str, condition: Callable[[WorkflowState], str]):
-        self._edges[src] = condition
-
-    def set_entry_point(self, name: str):
-        self._entry = name
-
-    def compile(self) -> "CompiledWorkflow":
-        return CompiledWorkflow(self)
-
-
-class CompiledWorkflow:
-    """Executable compiled form of a ``StateGraph``."""
-
-    def __init__(self, graph: StateGraph):
-        self._graph = graph
-
-    def invoke(self, inputs: dict | WorkflowState) -> WorkflowState:
-        if isinstance(inputs, dict):
-            state = WorkflowState(**{k: v for k, v in inputs.items()
-                                     if hasattr(WorkflowState, k)})
-        else:
-            state = inputs
-
-        current = self._graph._entry
-        visited: set[str] = set()
-
-        while current and current not in visited:
-            visited.add(current)
-            fn = self._graph._nodes.get(current)
-            if fn is None:
-                break
-            state = fn(state)
-
-            edge = self._graph._edges.get(current)
-            if edge is None:
-                break
-            if callable(edge):
-                current = edge(state)
-            else:
-                current = edge
-
-        return state
+class WorkflowState(TypedDict, total=False):
+    """Typed state flowing through the LangGraph workflow."""
+    user_input: str
+    driving_state: str
+    intent: dict
+    safety_result: dict
+    cot_result: dict
+    plan_result: dict
+    tool_results: dict
+    final_response: str
+    metadata: dict
 
 
 # -----------------------------------------------------------------------
-# Node implementations
+# Node implementations (return partial dicts for LangGraph state merging)
 # -----------------------------------------------------------------------
 
-def _parse_intent_node(state: WorkflowState) -> WorkflowState:
+def _parse_intent_node(state: WorkflowState) -> dict:
     parser = IntentParser()
-    intent = parser.parse(state.user_input)
-    state.intent = {
-        "type": intent.intent_type.value,
-        "domain": intent.domain.value,
-        "confidence": intent.confidence,
-        "slots": intent.slots,
+    intent = parser.parse(state.get("user_input", ""))
+    return {
+        "intent": {
+            "type": intent.intent_type.value,
+            "domain": intent.domain.value,
+            "confidence": intent.confidence,
+            "slots": intent.slots,
+        },
     }
-    return state
 
 
-def _safety_check_node(state: WorkflowState) -> WorkflowState:
+def _safety_check_node(state: WorkflowState) -> dict:
     from src.cockpit.domains import IntentType, DomainType, ParsedIntent, INTENT_DOMAIN_MAP
     checker = SafetyChecker()
+    intent = state.get("intent", {})
     try:
-        intent_type = IntentType(state.intent.get("type", "unknown"))
+        intent_type = IntentType(intent.get("type", "unknown"))
     except ValueError:
         intent_type = IntentType.UNKNOWN
     domain = INTENT_DOMAIN_MAP.get(intent_type, DomainType.GENERAL)
     parsed = ParsedIntent(intent_type=intent_type, domain=domain,
-                          confidence=state.intent.get("confidence", 0),
-                          slots=state.intent.get("slots", {}))
-    result = checker.check(parsed, state.driving_state)
-    state.safety_result = {
-        "is_safe": result.is_safe,
-        "requires_confirmation": result.requires_confirmation,
-        "blocked_reason": result.blocked_reason,
+                          confidence=intent.get("confidence", 0),
+                          slots=intent.get("slots", {}))
+    result = checker.check(parsed, state.get("driving_state", "parked"))
+    return {
+        "safety_result": {
+            "is_safe": result.is_safe,
+            "requires_confirmation": result.requires_confirmation,
+            "blocked_reason": result.blocked_reason,
+        },
     }
-    return state
 
 
-def _route_decision(state: WorkflowState) -> str:
+def _route_decision(state: WorkflowState) -> Literal["blocked", "tool_augment", "cot_reasoning"]:
     """根据安全状态和置信度决定走快速路径还是深度推理路径。"""
-    if not state.safety_result.get("is_safe", True):
+    if not state.get("safety_result", {}).get("is_safe", True):
         return "blocked"
-    # 与 dispatcher 保持一致的快速路径阈值
-    if state.intent.get("confidence", 0) >= DEFAULT_FAST_PATH_THRESHOLD:
+    if state.get("intent", {}).get("confidence", 0) >= DEFAULT_FAST_PATH_THRESHOLD:
         return "tool_augment"
     return "cot_reasoning"
 
 
-def _cot_node(state: WorkflowState) -> WorkflowState:
+def _cot_node(state: WorkflowState) -> dict:
     agent = CoTAgent()
-    response = agent.process(state.user_input)
-    state.cot_result = {
-        "content": response.content,
-        "intents": response.intent_results,
-        "confidence": response.confidence,
+    response = agent.process(state.get("user_input", ""))
+    result: dict[str, Any] = {
+        "cot_result": {
+            "content": response.content,
+            "intents": response.intent_results,
+            "confidence": response.confidence,
+        },
     }
-    # Propagate refined intents for the plan step
     if response.intent_results:
-        state.intent = response.intent_results[0]
-    return state
+        result["intent"] = response.intent_results[0]
+    return result
 
 
-def _plan_execute_node(state: WorkflowState) -> WorkflowState:
+def _plan_execute_node(state: WorkflowState) -> dict:
     agent = PlanExecuteAgent()
-    intent_results = state.cot_result.get("intents") or [state.intent]
+    intent_results = state.get("cot_result", {}).get("intents") or [state.get("intent", {})]
     context = {"intent_results": intent_results}
-    response = agent.process(state.user_input, context)
-    state.plan_result = {
-        "content": response.content,
-        "task_results": response.task_results,
-        "confidence": response.confidence,
+    response = agent.process(state.get("user_input", ""), context)
+    return {
+        "plan_result": {
+            "content": response.content,
+            "task_results": response.task_results,
+            "confidence": response.confidence,
+        },
+        "final_response": response.content,
     }
-    state.final_response = response.content
-    return state
 
 
-def _tool_augment_node(state: WorkflowState) -> WorkflowState:
+def _tool_augment_node(state: WorkflowState) -> dict:
     """Optionally call external tools (Amap, web search) to enrich results."""
-    domain = state.intent.get("domain", "")
-    slots = state.intent.get("slots", {})
+    intent = state.get("intent", {})
+    domain = intent.get("domain", "")
+    slots = intent.get("slots", {})
+    tool_results = dict(state.get("tool_results", {}))
 
     if domain == "navigation" and slots.get("destination"):
         amap = AmapTool()
         result = amap.run(action="poi_search", keywords=slots["destination"])
-        state.tool_results["amap"] = result.data
+        tool_results["amap"] = result.data
 
-    if state.intent.get("type") in ("query", "chat", "unknown"):
+    if intent.get("type") in ("query", "chat", "unknown"):
         search = WebSearchTool()
-        result = search.run(query=state.user_input)
-        state.tool_results["web_search"] = result.data
+        result = search.run(query=state.get("user_input", ""))
+        tool_results["web_search"] = result.data
 
-    return state
+    return {"tool_results": tool_results}
 
 
-def _blocked_node(state: WorkflowState) -> WorkflowState:
-    reason = state.safety_result.get("blocked_reason", "操作被阻止")
-    state.final_response = f"操作被阻止: {reason}"
-    return state
+def _blocked_node(state: WorkflowState) -> dict:
+    reason = state.get("safety_result", {}).get("blocked_reason", "操作被阻止")
+    return {"final_response": f"操作被阻止: {reason}"}
 
 
 # -----------------------------------------------------------------------
 # Public factory
 # -----------------------------------------------------------------------
 
-def create_langgraph_workflow(config: dict | None = None) -> CompiledWorkflow:
-    """Build and compile a LangGraph-style workflow for ZCAgent.
+def create_langgraph_workflow(config: dict | None = None):
+    """Build and compile a real LangGraph workflow for ZCAgent.
 
-    Returns a ``CompiledWorkflow`` whose ``invoke`` method accepts a dict
-    with ``user_input`` (and optional ``driving_state``) and returns a
-    ``WorkflowState`` with the full processing results.
+    Returns a compiled LangGraph ``CompiledStateGraph`` whose ``invoke``
+    method accepts a dict with ``user_input`` (and optional
+    ``driving_state``) and returns a ``WorkflowState`` dict with the full
+    processing results.
     """
-    graph = StateGraph()
+    graph = StateGraph(WorkflowState)
 
     graph.add_node("parse_intent", _parse_intent_node)
     graph.add_node("safety_check", _safety_check_node)
@@ -232,11 +175,12 @@ def create_langgraph_workflow(config: dict | None = None) -> CompiledWorkflow:
     graph.add_node("plan_execute", _plan_execute_node)
     graph.add_node("blocked", _blocked_node)
 
-    graph.set_entry_point("parse_intent")
+    graph.add_edge(START, "parse_intent")
     graph.add_edge("parse_intent", "safety_check")
-    graph.add_conditional_edge("safety_check", _route_decision)
-    graph.add_edge("blocked", "__end__")
+    graph.add_conditional_edges("safety_check", _route_decision)
+    graph.add_edge("blocked", END)
     graph.add_edge("cot_reasoning", "tool_augment")
     graph.add_edge("tool_augment", "plan_execute")
+    graph.add_edge("plan_execute", END)
 
     return graph.compile()

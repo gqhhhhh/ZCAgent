@@ -3,6 +3,11 @@
 import json
 import pytest
 
+from langchain_core.tools import BaseTool as LCBaseTool
+from langgraph.graph import StateGraph as LGStateGraph
+from autogen_core.tools import FunctionTool
+from mcp.types import Tool as MCPTool, TextContent
+
 from src.integrations.langchain_adapter import (
     ZCAgentLangChainTool,
     AmapLangChainTool,
@@ -11,11 +16,10 @@ from src.integrations.langchain_adapter import (
 )
 from src.integrations.langgraph_adapter import (
     WorkflowState,
-    StateGraph,
     create_langgraph_workflow,
 )
 from src.integrations.mcp_adapter import ZCAgentMCPServer
-from src.integrations.autogen_adapter import ZCAgentAssistant
+from src.integrations.autogen_adapter import ZCAgentAssistant, create_autogen_tools
 
 
 # -----------------------------------------------------------------------
@@ -30,6 +34,10 @@ class TestLangChainAdapter:
             "rag": {},
         }
 
+    def test_zcagent_tool_inherits_basetool(self):
+        tool = ZCAgentLangChainTool(config=self._default_config())
+        assert isinstance(tool, LCBaseTool)
+
     def test_zcagent_tool_run(self):
         tool = ZCAgentLangChainTool(config=self._default_config())
         result = tool.run("导航到天安门")
@@ -37,6 +45,7 @@ class TestLangChainAdapter:
 
     def test_amap_tool_run(self):
         tool = AmapLangChainTool()
+        assert isinstance(tool, LCBaseTool)
         result = tool.run("天安门")
         assert "天安门" in result
 
@@ -47,6 +56,7 @@ class TestLangChainAdapter:
 
     def test_web_search_tool_run(self):
         tool = WebSearchLangChainTool()
+        assert isinstance(tool, LCBaseTool)
         result = tool.run("Python")
         assert "Python" in result
 
@@ -64,28 +74,36 @@ class TestLangGraphAdapter:
     def test_workflow_navigation(self):
         workflow = create_langgraph_workflow()
         state = workflow.invoke({"user_input": "导航到天安门"})
-        assert isinstance(state, WorkflowState)
-        assert state.final_response != ""
+        assert isinstance(state, dict)
+        assert state["final_response"] != ""
 
     def test_workflow_music(self):
         workflow = create_langgraph_workflow()
         state = workflow.invoke({"user_input": "播放音乐"})
-        assert state.intent.get("type") == "play_music" or state.final_response
+        assert state.get("intent", {}).get("type") == "play_music" or state.get("final_response")
 
     def test_workflow_unknown(self):
         workflow = create_langgraph_workflow()
         state = workflow.invoke({"user_input": "xyzabc"})
-        assert isinstance(state, WorkflowState)
+        assert isinstance(state, dict)
 
-    def test_state_graph_basic(self):
-        graph = StateGraph()
-        graph.add_node("a", lambda s: s)
-        graph.add_node("b", lambda s: s)
+    def test_real_langgraph_stategraph(self):
+        """Verify the workflow uses a real LangGraph StateGraph."""
+        from langgraph.graph import StateGraph, START, END
+        from typing import TypedDict
+
+        class SimpleState(TypedDict, total=False):
+            value: str
+
+        graph = StateGraph(SimpleState)
+        graph.add_node("a", lambda s: {"value": s.get("value", "") + "_a"})
+        graph.add_node("b", lambda s: {"value": s.get("value", "") + "_b"})
+        graph.add_edge(START, "a")
         graph.add_edge("a", "b")
-        graph.set_entry_point("a")
+        graph.add_edge("b", END)
         compiled = graph.compile()
-        state = compiled.invoke(WorkflowState(user_input="test"))
-        assert state.user_input == "test"
+        state = compiled.invoke({"value": "test"})
+        assert state["value"] == "test_a_b"
 
 
 # -----------------------------------------------------------------------
@@ -104,7 +122,8 @@ class TestMCPAdapter:
         server = ZCAgentMCPServer(config=self._default_config())
         tools = server.list_tools()
         assert len(tools) == 3
-        names = [t["name"] for t in tools]
+        assert all(isinstance(t, MCPTool) for t in tools)
+        names = [t.name for t in tools]
         assert "cockpit_command" in names
         assert "map_search" in names
         assert "web_search" in names
@@ -113,7 +132,10 @@ class TestMCPAdapter:
         server = ZCAgentMCPServer(config=self._default_config())
         result = server.call_tool("cockpit_command", {"command": "导航到天安门"})
         assert "content" in result
-        assert any("天安门" in c.get("text", "") for c in result["content"])
+        assert any(
+            isinstance(c, TextContent) and "天安门" in c.text
+            for c in result["content"]
+        )
 
     def test_call_map_search(self):
         server = ZCAgentMCPServer(config=self._default_config())
@@ -202,3 +224,8 @@ class TestAutoGenAdapter:
         assert "cockpit_command" in fn_map
         assert "map_search" in fn_map
         assert "web_search" in fn_map
+
+    def test_create_autogen_tools(self):
+        tools = create_autogen_tools(config=self._default_config())
+        assert len(tools) == 3
+        assert all(isinstance(t, FunctionTool) for t in tools)

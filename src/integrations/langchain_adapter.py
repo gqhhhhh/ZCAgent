@@ -32,35 +32,13 @@ import json
 import logging
 from typing import Any
 
+from langchain_core.tools import BaseTool as _LCBaseTool  # type: ignore[import]
+
 from src.agent.dispatcher import AgentDispatcher
 from src.tools.amap_tool import AmapTool
 from src.tools.web_search_tool import WebSearchTool
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Try to import the real LangChain BaseTool; fall back to a lightweight shim.
-# ---------------------------------------------------------------------------
-
-try:
-    from langchain_core.tools import BaseTool as _LCBaseTool  # type: ignore[import]
-    _LANGCHAIN_AVAILABLE = True
-except ImportError:
-    _LANGCHAIN_AVAILABLE = False
-
-    class _LCBaseTool:  # type: ignore[no-redef]
-        """Minimal shim used when langchain-core is not installed."""
-        name: str = ""
-        description: str = ""
-
-        def run(self, tool_input: str, **kwargs) -> str:  # noqa: D401
-            return self._run(tool_input)
-
-        def _run(self, tool_input: str, **kwargs) -> str:
-            raise NotImplementedError
-
-        async def _arun(self, tool_input: str, **kwargs) -> str:
-            return self._run(tool_input)
 
 # ---------------------------------------------------------------------------
 # Concrete tool implementations
@@ -88,8 +66,7 @@ class ZCAgentLangChainTool(_LCBaseTool):
     )
 
     def __init__(self, config: dict | None = None, llm_client: Any = None, **kwargs):
-        if _LANGCHAIN_AVAILABLE:
-            super().__init__(**kwargs)
+        super().__init__(**kwargs)
         self._dispatcher = AgentDispatcher(config=config, llm_client=llm_client)
 
     def _run(self, query: str, run_manager=None, **kwargs) -> str:
@@ -116,8 +93,7 @@ class AmapLangChainTool(_LCBaseTool):
     )
 
     def __init__(self, api_key: str | None = None, **kwargs):
-        if _LANGCHAIN_AVAILABLE:
-            super().__init__(**kwargs)
+        super().__init__(**kwargs)
         self._amap = AmapTool(api_key=api_key)
 
     def _run(self, query: str, run_manager=None, **kwargs) -> str:
@@ -139,8 +115,7 @@ class WebSearchLangChainTool(_LCBaseTool):
     description: str = "网页搜索工具，输入关键词返回最新搜索结果。"
 
     def __init__(self, api_key: str | None = None, **kwargs):
-        if _LANGCHAIN_AVAILABLE:
-            super().__init__(**kwargs)
+        super().__init__(**kwargs)
         self._search = WebSearchTool(api_key=api_key)
 
     def _run(self, query: str, run_manager=None, **kwargs) -> str:
@@ -221,29 +196,12 @@ def create_react_agent_executor(
         result = executor.invoke({"input": "导航到天安门，顺便查一下天气"})
         print(result["output"])
     """
-    if not _LANGCHAIN_AVAILABLE:
-        raise ImportError(
-            "langchain-core is required for create_react_agent_executor. "
-            "Install it with: pip install langchain langchain-openai"
-        )
-
-    try:
-        from langchain.agents import create_react_agent, AgentExecutor  # type: ignore[import]
-        from langchain import hub  # type: ignore[import]
-    except ImportError as exc:
-        raise ImportError(
-            "langchain package is required. Install with: pip install langchain langchain-openai"
-        ) from exc
+    from langchain.agents import create_react_agent, AgentExecutor  # type: ignore[import]
+    from langchain import hub  # type: ignore[import]
 
     if llm is None:
-        try:
-            from langchain_openai import ChatOpenAI  # type: ignore[import]
-            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-        except ImportError as exc:
-            raise ImportError(
-                "langchain-openai is required when llm is not provided. "
-                "Install with: pip install langchain-openai"
-            ) from exc
+        from langchain_openai import ChatOpenAI  # type: ignore[import]
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     tools = [
         ZCAgentLangChainTool(config=config, llm_client=llm_client),

@@ -3,9 +3,10 @@
 Exposes ZCAgent capabilities as an MCP-compatible server that LLM clients
 (e.g. Claude Desktop, Cursor) can connect to.
 
-The adapter works **without** the ``mcp`` package installed by providing
-a lightweight protocol implementation.  When the official ``mcp`` SDK is
-available it can be used as a drop-in replacement.
+Uses the real ``mcp`` SDK types (:class:`mcp.types.Tool`,
+:class:`mcp.types.TextContent`) for protocol-compliant definitions and
+responses.  The :func:`create_mcp_server` helper returns a fully
+configured ``mcp.server.Server`` instance.
 
 Example usage::
 
@@ -23,6 +24,8 @@ import logging
 import sys
 from typing import Any
 
+from mcp.types import Tool as MCPTool, TextContent  # type: ignore[import]
+
 from src.agent.dispatcher import AgentDispatcher
 from src.tools.amap_tool import AmapTool
 from src.tools.web_search_tool import WebSearchTool
@@ -34,8 +37,9 @@ class ZCAgentMCPServer:
     """MCP server exposing ZCAgent tools to LLM clients.
 
     Implements the *tools/list* and *tools/call* methods of the MCP
-    specification so that an LLM client can discover and invoke the
-    cockpit agent, map search, and web search capabilities.
+    specification using real ``mcp.types.Tool`` and ``mcp.types.TextContent``
+    so that an LLM client can discover and invoke the cockpit agent,
+    map search, and web search capabilities.
     """
 
     SERVER_NAME = "zcagent-mcp-server"
@@ -47,16 +51,16 @@ class ZCAgentMCPServer:
         self.web_search = WebSearchTool()
 
     # ------------------------------------------------------------------
-    # Tool definitions
+    # Tool definitions (using real mcp.types.Tool)
     # ------------------------------------------------------------------
 
-    def list_tools(self) -> list[dict]:
-        """Return MCP tool definitions."""
+    def list_tools(self) -> list[MCPTool]:
+        """Return MCP tool definitions as real ``mcp.types.Tool`` objects."""
         return [
-            {
-                "name": "cockpit_command",
-                "description": "智能座舱语音指令处理，支持导航、音乐、电话、车辆控制等",
-                "inputSchema": {
+            MCPTool(
+                name="cockpit_command",
+                description="智能座舱语音指令处理，支持导航、音乐、电话、车辆控制等",
+                inputSchema={
                     "type": "object",
                     "properties": {
                         "command": {
@@ -71,11 +75,11 @@ class ZCAgentMCPServer:
                     },
                     "required": ["command"],
                 },
-            },
-            {
-                "name": "map_search",
-                "description": "高德地图搜索，支持POI搜索、地理编码、路径规划",
-                "inputSchema": {
+            ),
+            MCPTool(
+                name="map_search",
+                description="高德地图搜索，支持POI搜索、地理编码、路径规划",
+                inputSchema={
                     "type": "object",
                     "properties": {
                         "action": {
@@ -89,11 +93,11 @@ class ZCAgentMCPServer:
                     },
                     "required": ["action"],
                 },
-            },
-            {
-                "name": "web_search",
-                "description": "网页搜索，输入关键词返回搜索结果",
-                "inputSchema": {
+            ),
+            MCPTool(
+                name="web_search",
+                description="网页搜索，输入关键词返回搜索结果",
+                inputSchema={
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "搜索关键词"},
@@ -101,7 +105,7 @@ class ZCAgentMCPServer:
                     },
                     "required": ["query"],
                 },
-            },
+            ),
         ]
 
     # ------------------------------------------------------------------
@@ -116,7 +120,8 @@ class ZCAgentMCPServer:
             arguments: Tool-specific arguments.
 
         Returns:
-            Dict with ``content`` list following the MCP response format.
+            Dict with ``content`` list of ``TextContent`` objects
+            following the MCP response format.
         """
         try:
             if name == "cockpit_command":
@@ -131,7 +136,7 @@ class ZCAgentMCPServer:
             return self._error_response(str(exc))
 
     # ------------------------------------------------------------------
-    # Handlers
+    # Handlers (using real mcp.types.TextContent)
     # ------------------------------------------------------------------
 
     def _handle_cockpit(self, args: dict) -> dict:
@@ -140,7 +145,7 @@ class ZCAgentMCPServer:
         response = self.dispatcher.process(command, driving_state=driving_state)
         return {
             "content": [
-                {"type": "text", "text": response.content},
+                TextContent(type="text", text=response.content),
             ],
             "metadata": {
                 "confidence": response.confidence,
@@ -153,7 +158,7 @@ class ZCAgentMCPServer:
         result = self.amap.run(action=action, **args)
         return {
             "content": [
-                {"type": "text", "text": json.dumps(result.data, ensure_ascii=False)},
+                TextContent(type="text", text=json.dumps(result.data, ensure_ascii=False)),
             ],
         }
 
@@ -161,14 +166,14 @@ class ZCAgentMCPServer:
         result = self.web_search.run(**args)
         return {
             "content": [
-                {"type": "text", "text": json.dumps(result.data, ensure_ascii=False)},
+                TextContent(type="text", text=json.dumps(result.data, ensure_ascii=False)),
             ],
         }
 
     @staticmethod
     def _error_response(message: str) -> dict:
         return {
-            "content": [{"type": "text", "text": f"Error: {message}"}],
+            "content": [TextContent(type="text", text=f"Error: {message}")],
             "isError": True,
         }
 
@@ -189,12 +194,22 @@ class ZCAgentMCPServer:
             })
 
         if method == "tools/list":
-            return self._jsonrpc_response(msg_id, {"tools": self.list_tools()})
+            tools = self.list_tools()
+            return self._jsonrpc_response(msg_id, {
+                "tools": [t.model_dump() for t in tools],
+            })
 
         if method == "tools/call":
             params = message.get("params", {})
             result = self.call_tool(params.get("name", ""), params.get("arguments", {}))
-            return self._jsonrpc_response(msg_id, result)
+            # Serialize TextContent objects for JSON-RPC
+            serialized = dict(result)
+            if "content" in serialized:
+                serialized["content"] = [
+                    c.model_dump() if hasattr(c, "model_dump") else c
+                    for c in serialized["content"]
+                ]
+            return self._jsonrpc_response(msg_id, serialized)
 
         if method == "notifications/initialized":
             return None  # No response for notifications
