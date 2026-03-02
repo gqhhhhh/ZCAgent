@@ -14,5 +14,11 @@ setup(
         "rank-bm25>=0.2.2",
         "pyyaml>=6.0",
         "jieba>=0.42.1",
+        "langchain>=0.3.25",
+        "langchain-core>=0.3.81",
+        "langchain-openai>=0.3.0",
+        "langgraph>=0.3.0",
+        "pyautogen>=0.2.0",
+        "mcp>=1.0.0",
     ],
 )

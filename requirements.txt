@@ -6,6 +6,16 @@ pyyaml>=6.0
 jieba>=0.42.1
 pytest>=7.4.0
 
-# Optional: LangChain integration (required for create_react_agent_executor
-# and the examples/langchain_multi_agent_demo.py demo)
-# pip install langchain>=0.3.25 langchain-core>=0.3.81 langchain-openai>=0.3.0
+# LangChain ecosystem
+langchain>=0.3.25
+langchain-core>=0.3.81
+langchain-openai>=0.3.0
+
+# LangGraph
+langgraph>=0.3.0
+
+# AutoGen
+pyautogen>=0.2.0
+
+# MCP (Model Context Protocol)
+mcp>=1.0.0
