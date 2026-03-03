@@ -128,6 +128,11 @@ class VectorStore:
         """Number of documents in the store."""
         return len(self._documents)
 
+    @property
+    def documents(self) -> list[Document]:
+        """Return a copy of all stored documents."""
+        return list(self._documents)
+
     # ------------------------------------------------------------------
     # Persistence
     # ------------------------------------------------------------------

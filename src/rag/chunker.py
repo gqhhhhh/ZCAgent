@@ -137,7 +137,7 @@ class TextChunker:
                         current = part
                 else:
                     # Single part exceeds chunk_size — recurse deeper
-                    remaining_seps = separators[separators.index(sep) + 1:] if sep in separators else []
+                    remaining_seps = separators[separators.index(sep) + 1:]
                     if remaining_seps:
                         sub_chunks = self._recursive_split(part, remaining_seps)
                     else:

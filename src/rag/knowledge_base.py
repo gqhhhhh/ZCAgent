@@ -190,7 +190,7 @@ class KnowledgeBase:
         """
         self._vector_store.load(directory)
         # Rebuild BM25 index from the loaded documents
-        self._chunks = list(self._vector_store._documents)
+        self._chunks = list(self._vector_store.documents)
         self._bm25 = BM25Retriever()
         self._bm25.add_documents(self._chunks)
         logger.info(
