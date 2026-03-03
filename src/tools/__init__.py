@@ -2,6 +2,7 @@
 
 from src.tools.amap_tool import AmapTool
 from src.tools.web_search_tool import WebSearchTool
+from src.tools.vehicle_manual_tool import VehicleManualTool
 from src.tools.base_tool import BaseTool, ToolResult
 
-__all__ = ["AmapTool", "WebSearchTool", "BaseTool", "ToolResult"]
+__all__ = ["AmapTool", "WebSearchTool", "VehicleManualTool", "BaseTool", "ToolResult"]
