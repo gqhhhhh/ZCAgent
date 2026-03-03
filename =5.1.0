@@ -1,7 +1,0 @@
-Defaulting to user installation because normal site-packages is not writeable
-Collecting pypdf
-  Downloading pypdf-6.7.5-py3-none-any.whl.metadata (7.1 kB)
-Downloading pypdf-6.7.5-py3-none-any.whl (331 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 331.4/331.4 kB 78.7 MB/s eta 0:00:00
-Installing collected packages: pypdf
-Successfully installed pypdf-6.7.5
