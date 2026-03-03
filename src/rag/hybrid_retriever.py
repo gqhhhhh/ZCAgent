@@ -2,6 +2,7 @@
 
 三级混合检索管线：BM25 稀疏检索和 MMR 密集检索并行取候选，
 按权重加权融合后交给 ColBERT 重排序器做最终排序。
+支持从 PDF 文件构建外部知识库并进行混合检索。
 """
 
 import logging
@@ -19,6 +20,9 @@ class HybridRetriever:
     Uses BM25 for keyword-level matching (good for rules and exact terms),
     MMR for semantic diversity, then ColBERT for fine-grained reranking
     of the merged candidate set.
+
+    Supports loading external PDF documents as a knowledge base via
+    :meth:`load_pdf` and :meth:`load_pdf_directory`.
     """
 
     def __init__(self, config: dict | None = None):
@@ -38,6 +42,46 @@ class HybridRetriever:
         """Add documents to both retrievers."""
         self.bm25.add_documents(documents)
         self.mmr.add_documents(documents)
+
+    def load_pdf(self, pdf_path: str,
+                 chunk_size: int = 512, chunk_overlap: int = 64):
+        """Load a PDF file, chunk it, and add chunks to both retrievers.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            chunk_size: Maximum characters per chunk.
+            chunk_overlap: Overlap between consecutive chunks.
+        """
+        from src.rag.pdf_loader import PDFLoader
+        from src.rag.chunker import TextChunker
+
+        pages = PDFLoader().load(pdf_path)
+        chunks = TextChunker(
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap,
+        ).chunk_documents(pages)
+        self.add_documents(chunks)
+        logger.info("Loaded %d chunks from PDF: %s", len(chunks), pdf_path)
+
+    def load_pdf_directory(self, dir_path: str,
+                           chunk_size: int = 512, chunk_overlap: int = 64):
+        """Load all PDFs from a directory, chunk and index them.
+
+        Args:
+            dir_path: Path to a directory of PDF files.
+            chunk_size: Maximum characters per chunk.
+            chunk_overlap: Overlap between consecutive chunks.
+        """
+        from src.rag.pdf_loader import PDFLoader
+        from src.rag.chunker import TextChunker
+
+        pages = PDFLoader().load_directory(dir_path)
+        chunks = TextChunker(
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap,
+        ).chunk_documents(pages)
+        self.add_documents(chunks)
+        logger.info(
+            "Loaded %d chunks from PDF directory: %s", len(chunks), dir_path,
+        )
 
     def retrieve(self, query: str, top_k: int | None = None,
                  rerank_top_k: int | None = None) -> list[Document]:

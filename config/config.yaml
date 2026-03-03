@@ -12,6 +12,15 @@ rag:
   top_k: 5
   rerank_top_k: 3
 
+knowledge_base:
+  chunk_size: 512
+  chunk_overlap: 64
+  bm25_weight: 0.4
+  vector_weight: 0.6
+  top_k: 5
+  rerank_top_k: 3
+  persist_directory: "data/kb_store"
+
 memory:
   working_memory_capacity: 10
   short_term_ttl_seconds: 300
