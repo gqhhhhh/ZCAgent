@@ -14,6 +14,7 @@ setup(
         "rank-bm25>=0.2.2",
         "pyyaml>=6.0",
         "jieba>=0.42.1",
+        "pypdf>=5.1.0",
         "langchain>=0.3.25",
         "langchain-core>=0.3.81",
         "langchain-openai>=0.3.0",
